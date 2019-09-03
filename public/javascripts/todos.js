@@ -1,97 +1,3 @@
-// input:
-// 	- adding a todo
-// output:
-// 	- todo is created and added to the list if we submit it
-// 	- cancelled if we click outside the modal
-// description:
-// 	problem 1:
-// 		- so we have a modal displayed that has a form
-// 		- we need a way to associate the modal with an object
-// 		- there's nothing on the modal that can associate with a given todo
-// 		- maybe we can set a state when displaying the modal and remove it again once it's hidden
-// 	problem 2:
-// 		- we can listen for submit events on the body object
-// 		- when a submit event occurs:
-// 			- get a reference to the form using event.target
-// 			# FUNCTION (configureCreateOrUpdateRequest)
-// 				if this.currentlyEditingId:
-// 					requestArgs = {url: `/api/contacts/${this.currentlyEditingId}`, method: 'PUT'};
-// 				else:
-// 					requestArgs = {url: '/api/contacts', method: 'POST'}
-
-// 				requestArgs['dataCallback'] = function() {
-// 					const formData = new FormData(form);
-// 					const json = JSON.stringify(formDataToObject(formData));
-// 					return json;
-// 				}
-// 			- call request with requestArgs
-// 			- if the xhr.status is 400:
-// 				- alert(xhr.statusText);
-// 				- return;
-// 			- then(({target: xhr}) => {
-// 				add the element to the collection
-// 				sort the collection
-// 				render the page
-// 			})
-// rules:
-// 	- serialize array to JSON:
-// 		- define a formDataToObject function:
-// 			- declare an empty object
-// 			- iterate over the pair of formData.entries()
-// 			- assign pair[0] as the key and pair[1] as the value
-// 			- return the object
-// 		- pass the form into the FormData constructor
-// 		- pass the resulting ormData to formDataToObject() and call JSON.stringify on it
-// 		- return the json
-// Test Cases:
-// 	- element is added to the collection, collection is sorted and the DOM is updated to reflect that
-// Data Structure:
-// 	- new currentlyEditingId state, objects, JSON.stringify, callbacks
-// Algorithm:
-// 	- on the TodosApp:
-// 		- define this.configureCreateOrUpdateRequest(form) method:
-// 			if this.updateId:
-// 					requestArgs = {url: `/api/contacts/${this.currentlyEditingId}`, method: 'PUT'};
-// 				else:
-// 					requestArgs = {url: '/api/contacts', method: 'POST'}
-
-// 			requestArgs['dataCallback'] = function() {
-// 				const formData = new FormData(form);
-// 				const json = JSON.stringify(formDataToObject(formData));
-// 				return json;
-// 			}
-
-// 			return requestArgs;
-// 		- define a this.addToCollection(todo) method:
-// 			- this.todos.push(todo);
-// 		- define a this.sortCollection() method:
-// 			this.todos.sort((a, b) => {
-// 				const titleA = a.title.toUpperCase();
-// 				const titleB = b.title.toUpperCase();
-// 			    if (titleA > titleB) {
-// 			        return 1;
-// 			    }
-// 			    if (titleA < titleB) {
-// 			        return -1;
-// 			    }
-// 				return 0;
-// 			})
-// 		- define a this.createOrUpdateTodo(requestArgs) method:
-// 			- call request(requestArgs).then(({target: xhr}) => {
-// 				- if the xhr.status is 400:
-// 					- alert(xhr.statusText);
-// 					- return;
-// 				- call this.addToCollection(xhr.response)
-// 				- call this.sortCollection;
-// 				- render the page
-// 			});
-// 		- define a this.handleSubmit({target: form}) method:
-// 			- set requestArgs to this.configureCreateOrUpdateRequest()
-// 			- call this.createOrUpdateTodo(requestArgs)
-// 			- call request(requestArgs).then(({target: xhr}))
-// 		- in the this.bindEvents method():
-// 			- call document.body.addEventListener('submit', this.handleSubmit.bind(this));
-
 let TodosApp;
 
 (() => {
@@ -114,9 +20,12 @@ let TodosApp;
 		});
 	}
 
-	function formDataToObject(formData) {
-    var object = {};
-    for (var pair of formData.entries()) {
+	function formDataToObject(formData, stripInvalid) {
+    const object = {};
+    for (let pair of formData.entries()) {
+    	if (stripInvalid && stripInvalid(pair)) {
+    		pair[1] = '';
+    	}
       object[pair[0]] = pair[1];
     }
 
@@ -130,7 +39,7 @@ let TodosApp;
 			const handlebarsTemplates = document.querySelectorAll('[type="text/x-handlebars"]');
 			for (let i = 0; i < handlebarsTemplates.length; i += 1) {
 				let template = handlebarsTemplates[i];
-				if (template.getAttribute('data-type') === 'partial') {
+				if (template.dataset.type === 'partial') {
 					Handlebars.registerPartial(template.id, template.innerHTML);
 				} else {
 					this.templates[template.id] = Handlebars.compile(template.innerHTML);
@@ -147,7 +56,7 @@ let TodosApp;
 			// REVALUATE WHETHER THIS IS NECESSARY AFTER ADDING MORE FUNCTIONALITY
 			this.todos = todos.map(todo => {
 				if (todo.month && todo.year) {
-					todo.due_date = `${month}/${year.substring(1)}`;
+					todo.due_date = `${todo.month}/${todo.year.substring(2)}`;
 				} else {
 					todo.due_date = 'No Due Date';
 				}
@@ -156,39 +65,87 @@ let TodosApp;
 
 			return this.todos;
 		},
+		sortCollection() {
+			this.todos.sort((a, b) => {
+				const titleA = a.title.toUpperCase();
+				const titleB = b.title.toUpperCase();
+			    if (titleA > titleB) {
+		        return 1;
+			    }
+			    if (titleA < titleB) {
+		        return -1;
+			    }
+				return 0;
+			});
+		},
 		setCurrentSection(content) {
 			return content['current_section'] = {data: this.todos.length, title: 'All Todos'};
 		},
 		renderPage(refreshTodos = true) {
 			// Is there ever a case where we dont' want due dates? I guess we'll see
+			let todos;
 			const content = {};
 
+			this.currentlyEditingId = null;
+
 			if (refreshTodos) {
-				this.getTodos()
-				.then(this.addDueDates.bind(this))
-				.then(() => {
-					// duplication
-					this.setCurrentSection(content);
-					content['selected'] = this.todos;
-					document.body.innerHTML = this.templates.main_template(content);
-				});
+				todos = this.getTodos();
 			} else {
-				// duplication
+				todos = Promise.resolve(this.todos);
+			}
+
+			todos
+			.then(this.addDueDates.bind(this))
+			.then(this.sortCollection.bind(this))
+			.then(() => {
 				this.setCurrentSection(content);
 				content['selected'] = this.todos;
 				document.body.innerHTML = this.templates.main_template(content);
+			});
+		},
+		getTodo(id) {
+			return request({url: `/api/todos/${this.currentlyEditingId}`}).then(({target: xhr}) => {
+				if (xhr.status === 404) {
+					alert(xhr.responseText);
+					return;
+				}
+
+				return xhr.response;
+			});
+		},
+		renderFormFields(todo) {
+			for (let property in todo) {
+				let formField = document.querySelector(`#form_modal [name$="${property}"]`);
+				if (formField && todo[property]) {
+					formField.value = todo[property];
+				}
 			}
 		},
-		displayModal() {
-			$('#form_modal').css({top: 200 + window.scrollY});
-			$('#modal_layer, #form_modal').fadeIn();
+		displayModal(updateId) {
+			let preparedModal;
+
+			if (updateId) {
+				this.currentlyEditingId = updateId;
+				preparedModal = this.getTodo(this.currentlyEditingId)
+					.then(this.renderFormFields.bind(this));
+			} else {
+				preparedModal = Promise.resolve();
+			}
+
+			preparedModal.then(() => {
+				$('#form_modal').css({top: 200 + window.scrollY});
+				$('#modal_layer, #form_modal').stop().fadeIn();
+			});
 		},
 		removeFromCollection(id) {
 			this.todos = this.todos.filter(todo => todo.id !== Number(id));
 		},
+		getTodoElement(element) {
+			return element.closest('tr[data-id]');
+		},
 		deleteTodo(element) {
-			const todo = element.closest('tr[data-id]');
-			const id = todo.getAttribute('data-id');
+			const todo = this.getTodoElement(element);
+			const id = todo.dataset.id;
 
 			request({url: `/api/todos/${id}`, method: 'DELETE'}).then(({target: xhr}) => {
 				if (xhr.status === 404) {
@@ -201,18 +158,62 @@ let TodosApp;
 				this.renderPage(false);
 			});
 		},
-		handleClick({target: element}) {
+		editTodo(element) {
+			const id = this.getTodoElement(element).dataset.id;
+			this.displayModal(id);
+		},
+		hideModal() {
+			if (this.currentlyEditingId) {
+				this.currentlyEditingId = null;
+			}
+
+			$('#modal_layer, #form_modal').stop().fadeOut();
+		},
+		markTodoComplete(element) {
+			let id;
+			let data;
+
+			if (element.matches('.list_item')) {
+				this.currentlyEditingId = this.getTodoElement(element).dataset.id;
+				data = {completed: !(this.todos.find(todo => todo.id === Number(this.currentlyEditingId))).completed};
+			} else if (element.matches('button[name="complete"]')) {
+				data = {completed: true};
+			} else {
+				alert('Cannot mark as complete as item has not been created yet!');
+				return;
+			}
+
+			this.createOrUpdateTodo({
+				url: `/api/todos/${this.currentlyEditingId}`,
+				method: 'PUT',
+				dataCallback(xhr) {
+					xhr.setRequestHeader('Content-Type', 'application/json');
+					return JSON.stringify(data);
+				}
+			});
+		},
+		handleClick(event) {
+			const element = event.target;
+
 			// give the conditions better names for legibility
 			if (element.parentNode.matches('[for="new_item"]')) {
 				this.displayModal();
 			} else if (element.closest('.delete') !== null) {
 				this.deleteTodo(element);
+			} else if (element.matches('main label[for^="item"]')) {
+				event.preventDefault()
+				this.editTodo(element);
+			} else if (element.matches('#modal_layer')) {
+				this.hideModal();
+			} else if (element.matches('.list_item, button[name="complete"]')) {
+				event.preventDefault();
+				this.markTodoComplete(element);
 			}
 		},
 		configureCreateOrUpdateRequest(form) {
 			let requestArgs;
 
-			if (this.updateId) {
+			if (this.currentlyEditingId) {
 				requestArgs = {url: `/api/todos/${this.currentlyEditingId}`, method: 'PUT'};
 			} else {
 				requestArgs = {url: '/api/todos', method: 'POST'}
@@ -222,24 +223,41 @@ let TodosApp;
 				xhr.setRequestHeader('Content-Type', 'application/json');
 
 				const formData = new FormData(form);
-				const json = JSON.stringify(formDataToObject(formData));
+				const json = JSON.stringify(formDataToObject(formData, input => {
+					if (['due_day', 'due_month', 'due_year'].includes(input[0])) {
+						input[0] = input[0].replace('due_', '');
+						return !/\d+/.test(input[1]);
+					}
+					return false;
+				}));
+
 				return json;
 			}
 
 			return requestArgs;
+		},
+		editCollection(editedTodo) {
+			const todo =  this.todos.find(todo => todo.id === Number(this.currentlyEditingId));
+			for (let property in editedTodo) {
+				todo[property] = editedTodo[property];
+			}
 		},
 		addToCollection(todo) {
 			this.todos.push(todo);
 		},
 		createOrUpdateTodo(args) {
 			request(args).then(({target: xhr}) => {
-				if (xhr.status === 400) {
+				if (xhr.status === 400 || xhr.status === 404) {
 					alert(xhr.statusText);
 					return;
 				}
 
-				this.addToCollection(xhr.response);
-				// - call this.sortCollection;
+				if (this.currentlyEditingId) {
+					this.editCollection(xhr.response);
+				} else {
+					this.addToCollection(xhr.response);
+				}
+
 				this.renderPage(false);
 			});
 		},
