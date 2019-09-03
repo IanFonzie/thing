@@ -205,11 +205,17 @@ let TodosApp;
 				return 0;
 			});
 		},
-		setCurrentSection(content) {
-			return content['current_section'] = {data: this.todos.length, title: 'All Todos'};
+		getDoneTodos() {
+			this.done = this.todos.filter(todo => todo.completed);
+		},
+		setSelected(context, dateGroup) {
+			this.selected = context.endsWith('todos_by_date') ? this[context][dateGroup] : this[context];
+		},
+		setCurrentSection(dateGroup) {
+			this.current_section = {data: this.selected.length, title: dateGroup};
 		},
 		formattedTodos() {
-			return this.todos.filter(todo => !todo.completed).concat(this.todos.filter(todo => todo.completed));
+			return this.selected.filter(todo => !todo.completed).concat(this.selected.filter(todo => todo.completed));
 		},
 		renderPage({context, dateGroup, refreshTodos = true}) {
 			// Is there ever a case where we dont' want due dates? I guess we'll see
@@ -228,9 +234,13 @@ let TodosApp;
 			.then(this.addDueDates.bind(this))
 			.then(this.sortCollection.bind(this))
 			.then(() => {
-				this.setCurrentSection(content);
+				this.getDoneTodos();
+				if (context) { // look into using properties instead of passing in context and don't change context until told to
+					this.setSelected(context, dateGroup);
+					this.setCurrentSection(dateGroup);
+				}
 				content['selected'] = this.formattedTodos();
-				document.body.innerHTML = this.templates.main_template(content);
+				document.body.innerHTML = this.templates.main_template(this);
 			});
 		},
 		getTodo(id) {
@@ -322,6 +332,22 @@ let TodosApp;
 				}
 			});
 		},
+		getDateGroup(element) {
+			return element.closest(dl[data-title]).dataset.title;
+		},
+		getViewingContext(element, dateGroup) {
+			const id = element.closest('section[id]').id;
+			if (/\d{2}\/\d{2}/).test(dateGroup) {
+				return id === 'all' ? 'todos_by_date' : 'done_todos_by_date';
+			}
+			return id === 'all' ? 'todos' : 'done';
+		},
+		changeGroupView(element) {
+			const dateGroup = this.getDateGroup(element);
+			const context = this.getViewingContext(element);
+
+			this.renderPage({context, dateGroup});
+		},
 		handleClick(event) {
 			const element = event.target;
 
@@ -338,6 +364,8 @@ let TodosApp;
 			} else if (element.matches('.list_item, button[name="complete"]')) {
 				event.preventDefault();
 				this.markTodoComplete(element);
+			} else if (element.closest('dl[data-title]')) {
+				this.changeGroupView(element);
 			}
 		},
 		configureCreateOrUpdateRequest(form) {
