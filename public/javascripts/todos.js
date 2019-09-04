@@ -89,21 +89,38 @@ let TodosApp;
 		},
 		groupByDate(todos) {
 			return todos.reduce((grouped, todo) => {
-				let date = grouped[todo.due_date];
+				let date = grouped.find(groupedTodo => groupedTodo[0] === todo.due_date);
 				if (date) {
-				  date.push(todo);
+				  date[1].push(todo);
 		    } else {
-		      grouped[todo.due_date] = [todo];
+		      grouped.push([todo.due_date, [todo]]);
 				}
 
 				return grouped;
-			}, {});
+			}, []);
+		},
+		sortByDate(todos) {
+			todos.sort(function(a,b) {
+			  a = a[0].split('/').reverse().join('');
+			  b = b[0].split('/').reverse().join('');
+			  return a > b ? 1 : a < b ? -1 : 0;
+			});
+
+			const noDueDates = todos.pop();
+			todos.unshift(noDueDates);
+			return todos;
+		},
+		groupAndSortByDate(todos) {
+			const grouped = this.groupByDate(todos);
+			const sorted = this.sortByDate(grouped);
+
+			return Object.fromEntries(sorted);
 		},
 		setTodosByDate() {
-			this.todos_by_date = this.groupByDate(this.todos);
+			this.todos_by_date = this.groupAndSortByDate(this.todos);
 		},
 		setDoneTodosByDate() {
-			this.done_todos_by_date = this.groupByDate(this.done);
+			this.done_todos_by_date = this.groupAndSortByDate(this.done);
 		},
 		setSelected({viewSet, dateGroup}) {
 			this.selected = viewSet.endsWith('todos_by_date') ? this[viewSet][dateGroup] || [] : this[viewSet];
