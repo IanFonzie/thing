@@ -127,8 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		  return a > b ? 1 : a < b ? -1 : 0;
 		});
 
-		const noDueDates = todos.pop();
-		todos.unshift(noDueDates);
+		if (todos[todos.length - 1][0] === 'No Due Date') {
+			const noDueDates = todos.pop();
+			todos.unshift(noDueDates);
+		}
+
 		return todos;
 	};
 
@@ -165,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		const selector = context['viewSet'].startsWith('done') ? '#completed_items' : '#all';
 		const element = document.querySelector(`${selector} [data-title="${context['dateGroup']}"]`);
 		element.classList.add('active');
-	},
+	};
 
 	TodosApp.prototype.renderPage = function({context = null, refreshTodos = true}) {
 		let todos;
